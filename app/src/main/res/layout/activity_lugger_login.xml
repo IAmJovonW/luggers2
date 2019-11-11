@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:id="@+id/rootLayout"
+    tools:context=".LuggerLoginActivity">
+
+    <LinearLayout
+        android:orientation="vertical"
+        android:layout_marginTop="30dp"
+        android:layout_centerHorizontal="true"
+        android:gravity="center_horizontal"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:id="@+id/tvTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="100dp"
+            android:fontFamily="@font/shrikhand"
+            android:text="Luggerz"
+            android:textColor="#1976D2"
+            android:textSize="48sp" />
+
+        <TextView
+            android:id="@+id/tvLuggerSubtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/shrikhand"
+            android:text="Lugger"
+            android:textAlignment="center"
+            android:textColor="#1976D2"
+            android:textSize="16sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_marginStart="16dp"
+        android:layout_marginLeft="16dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginRight="16dp"
+        android:layout_marginBottom="16dp"
+        android:gravity="center|center_horizontal"
+        android:orientation="vertical"
+        android:weightSum="2">
+
+        <EditText
+            android:id="@+id/email"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Email"
+            android:inputType="textEmailAddress"
+            android:singleLine="true" />
+
+        <EditText
+            android:id="@+id/password"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="30dp"
+            android:hint="Password"
+            android:inputType="textPassword"
+            android:singleLine="true" />
+
+
+        <Button
+            android:id="@+id/login"
+            android:layout_width="196dp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginBottom="30dp"
+            android:background="@drawable/blue_button_rounded"
+            android:fontFamily="@font/roboto"
+            android:text="LOGIN"
+            android:textAlignment="center"
+            android:textColor="#FFFFFF"></Button>
+
+        <Button
+            android:id="@+id/registration"
+            android:layout_width="196dp"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="6dp"
+            android:layout_marginBottom="60dp"
+            android:background="@drawable/white_button_rounded"
+            android:fontFamily="@font/roboto"
+            android:text="REGISTER"
+            android:textAlignment="center"
+            android:textColor="#1976D2"></Button>
+
+
+    </LinearLayout>
+
+
+
+</RelativeLayout>

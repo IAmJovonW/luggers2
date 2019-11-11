@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "1098130548935",
+    "firebase_url": "https://luggers2-301d1.firebaseio.com",
+    "project_id": "luggers2-301d1",
+    "storage_bucket": "luggers2-301d1.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1098130548935:android:12982a0849803ef86636e2",
+        "android_client_info": {
+          "package_name": "com.example.luggers2"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1098130548935-lol178s9g9t576hljl26i4b8rik0sl4q.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.luggers2",
+            "certificate_hash": "ca58aa56a2c1030634f4f890d326475341794aeb"
+          }
+        },
+        {
+          "client_id": "1098130548935-0bqrh1t1kev1vhjtf1qrl444p947r39c.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBF5XBnW0A26YRzzLcGr9AWoIv3UGTvm7U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1098130548935-0bqrh1t1kev1vhjtf1qrl444p947r39c.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
