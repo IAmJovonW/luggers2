@@ -2,6 +2,7 @@ package com.example.luggers2;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.fragment.app.FragmentActivity;
 
@@ -9,7 +10,6 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.Location;
-import android.location.LocationListener;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
@@ -17,6 +17,8 @@ import android.widget.Toast;
 
 import com.firebase.geofire.GeoFire;
 import com.firebase.geofire.GeoLocation;
+import com.firebase.geofire.GeoQuery;
+import com.firebase.geofire.GeoQueryEventListener;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.location.LocationRequest;
@@ -26,6 +28,7 @@ import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.database.DataSnapshot;
@@ -34,12 +37,10 @@ import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
 
-import java.io.ObjectStreamException;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
-
-public class LuggerMapActivity extends FragmentActivity implements OnMapReadyCallback, GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener, com.google.android.gms.location.LocationListener {
+public class PatronMapActivity extends FragmentActivity implements OnMapReadyCallback, GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener, com.google.android.gms.location.LocationListener {
 
     private SupportMapFragment mapFragment;
     private GoogleMap mMap;
@@ -47,20 +48,20 @@ public class LuggerMapActivity extends FragmentActivity implements OnMapReadyCal
     Location mLastLocation;
     LocationRequest mLocationRequest;
 
-    private Button mLogout;
-    private String patronId = "";
+    private Button mLogout, mRequest;
+    private LatLng pickupLocation;
 
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_lugger_map);
+        setContentView(R.layout.activity_patron_map);
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
         mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.map);
 
         if(ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED ){
-            ActivityCompat.requestPermissions(LuggerMapActivity.this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION},LOCATION_REQUEST_CODE);
+            ActivityCompat.requestPermissions(PatronMapActivity.this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION},LOCATION_REQUEST_CODE);
         }else {
             mapFragment.getMapAsync(this);
 
@@ -68,50 +69,111 @@ public class LuggerMapActivity extends FragmentActivity implements OnMapReadyCal
 
 
         mLogout = (Button) findViewById(R.id.logout);
+        mRequest = (Button) findViewById(R.id.request);
+
+
         mLogout.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 FirebaseAuth.getInstance().signOut();
-                Intent intent = new Intent(LuggerMapActivity.this, MainActivity.class);
+                Intent intent = new Intent(PatronMapActivity.this, MainActivity.class);
                 startActivity(intent);
                 finish();
                 return;
             }
         });
 
-        getAssignedPatron();
-
-    }
-
-    private void getAssignedPatron() {
-        String luggerId = FirebaseAuth.getInstance().getCurrentUser().getUid();
-        DatabaseReference assignedPatronRef = FirebaseDatabase.getInstance().getReference().child("Users").child("Luggers").child(luggerId).child("patronLugId");
-        assignedPatronRef.addValueEventListener(new ValueEventListener() {
+        mRequest.setOnClickListener(new View.OnClickListener() {
             @Override
-            public void onDataChange(DataSnapshot dataSnapshot) {
-                if(dataSnapshot.exists()){
-                    patronId = dataSnapshot.getValue().toString();
-                    getAssignedPatronPickupLocation();
-                }
-            }
+            public void onClick(View view) {
+                String userId = FirebaseAuth.getInstance().getCurrentUser().getUid();
 
-            @Override
-            public void onCancelled(DatabaseError databaseError) {
+                DatabaseReference ref = FirebaseDatabase.getInstance().getReference("patronRequest");
+                GeoFire geoFire = new GeoFire(ref);
+                geoFire.setLocation(userId, new GeoLocation(mLastLocation.getLatitude(), mLastLocation.getLongitude()), new GeoFire.CompletionListener() {
+                    @Override
+                    public void onComplete(String key, DatabaseError error) {
+
+                    }
+                });
+
+                pickupLocation = new LatLng(mLastLocation.getLatitude(), mLastLocation.getLongitude());
+                mMap.addMarker(new MarkerOptions().position(pickupLocation).title("Pickup Here"));
+                mRequest.setText("Getting your Lugger...");
+
+                getClosestLugger();
+
             }
         });
 
-
     }
 
-    private void getAssignedPatronPickupLocation() {
-        DatabaseReference assignedPatronPickupLocationRef = FirebaseDatabase.getInstance().getReference().child("patronRequest").child(patronId).child("l");
-        assignedPatronPickupLocationRef.addValueEventListener(new ValueEventListener() {
+    private int radius = 1;
+    private Boolean luggerFound = false;
+    private String luggerFoundID;
+
+    private void getClosestLugger() {
+        DatabaseReference luggerLocation = FirebaseDatabase.getInstance().getReference().child("luggersAvailable");
+        GeoFire geoFire = new GeoFire(luggerLocation);
+        GeoQuery geoQuery = geoFire.queryAtLocation(new GeoLocation(pickupLocation.latitude, pickupLocation.longitude), radius);
+        geoQuery.removeAllListeners();
+
+        geoQuery.addGeoQueryEventListener(new GeoQueryEventListener() {
+            @Override
+            public void onKeyEntered(String key, GeoLocation location) {
+                if(!luggerFound){
+                    luggerFound = true;
+                    luggerFoundID = key;
+
+                    DatabaseReference luggerRef = FirebaseDatabase.getInstance().getReference().child("Users").child("Luggers").child(luggerFoundID);
+                    String patronId = FirebaseAuth.getInstance().getCurrentUser().getUid();
+                    HashMap map = new HashMap();
+                    map.put("patronLugId", patronId);
+                    luggerRef.updateChildren(map);
+
+                    getLuggerLocation();
+                    mRequest.setText("Looking for Lugger Location...");
+
+                }
+
+            }
+
+            @Override
+            public void onKeyExited(String key) {
+
+            }
+
+            @Override
+            public void onKeyMoved(String key, GeoLocation location) {
+
+            }
+
+            @Override
+            public void onGeoQueryReady() {
+                if(!luggerFound){
+                    radius++;
+                    getClosestLugger();
+                }
+
+            }
+
+            @Override
+            public void onGeoQueryError(DatabaseError error) {
+
+            }
+        });
+    }
+    private Marker mLuggerMarker;
+    private void getLuggerLocation() {
+        DatabaseReference luggerLocationRef = FirebaseDatabase.getInstance().getReference().child("luggersWorking").child(luggerFoundID).child("l");
+        luggerLocationRef.addValueEventListener(new ValueEventListener() {
             @Override
             public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
                 if(dataSnapshot.exists()){
                     List<Object> map = (List<Object>) dataSnapshot.getValue();
                     double locationLat = 0;
                     double locationLng = 0;
+                    mRequest.setText("Lugger Found!");
                     if(map.get(0) != null){
                         locationLat = Double.parseDouble(map.get(0).toString());
                     }
@@ -119,8 +181,13 @@ public class LuggerMapActivity extends FragmentActivity implements OnMapReadyCal
                         locationLng = Double.parseDouble(map.get(1).toString());
                     }
                     LatLng luggerLatLng = new LatLng(locationLat, locationLng);
+                    if(mLuggerMarker != null){
+                        mLuggerMarker.remove();
+                    }
 
-                    mMap.addMarker(new MarkerOptions().position(luggerLatLng).title("pickup location"));
+                    mLuggerMarker = mMap.addMarker(new MarkerOptions().position(luggerLatLng).title("Your Lugger"));
+
+
                 }
             }
 
@@ -129,6 +196,7 @@ public class LuggerMapActivity extends FragmentActivity implements OnMapReadyCal
 
             }
         });
+
     }
 
 
@@ -136,7 +204,7 @@ public class LuggerMapActivity extends FragmentActivity implements OnMapReadyCal
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
         if(ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED ){
-            ActivityCompat.requestPermissions(LuggerMapActivity.this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION},LOCATION_REQUEST_CODE);
+            ActivityCompat.requestPermissions(PatronMapActivity.this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION},LOCATION_REQUEST_CODE);
         }
 
         buildGoogleApiClient();
@@ -152,61 +220,12 @@ public class LuggerMapActivity extends FragmentActivity implements OnMapReadyCal
 
     @Override
     public void onLocationChanged(Location location) {
-        if(getApplicationContext()!= null) {
+        mLastLocation = location;
 
-            mLastLocation = location;
-            LatLng latLng = new LatLng(location.getLatitude(), location.getLongitude());
-            mMap.moveCamera(CameraUpdateFactory.newLatLng(latLng));
-            mMap.animateCamera(CameraUpdateFactory.zoomTo(11));
-            String userId = FirebaseAuth.getInstance().getCurrentUser().getUid();
-            DatabaseReference refAvailable = FirebaseDatabase.getInstance().getReference("luggersAvailable");
-            DatabaseReference refWorking = FirebaseDatabase.getInstance().getReference("luggersWorking");
-            GeoFire geoFireAvailable = new GeoFire(refAvailable);
-            GeoFire geoFireWorking = new GeoFire(refWorking);
+        LatLng latLng = new LatLng(location.getLatitude(), location.getLongitude());
 
-
-            switch (patronId) {
-                case "":
-
-                    geoFireWorking.removeLocation(userId, new GeoFire.CompletionListener() {
-                        @Override
-                        public void onComplete(String key, DatabaseError error) {
-
-                        }
-                    });
-
-                    geoFireAvailable.setLocation(userId, new GeoLocation(location.getLatitude(), location.getLongitude()), new GeoFire.CompletionListener() {
-                        @Override
-                        public void onComplete(String key, DatabaseError error) {
-
-                        }
-                    });
-
-                    break;
-
-                default:
-
-                    geoFireAvailable.removeLocation(userId, new GeoFire.CompletionListener() {
-                        @Override
-                        public void onComplete(String key, DatabaseError error) {
-
-                        }
-                    });
-
-                    geoFireWorking.setLocation(userId, new GeoLocation(location.getLatitude(), location.getLongitude()), new GeoFire.CompletionListener() {
-                        @Override
-                        public void onComplete(String key, DatabaseError error) {
-
-                        }
-                    });
-
-                    break;
-            }
-        }
-
-
-
-
+        mMap.moveCamera(CameraUpdateFactory.newLatLng(latLng));
+        mMap.animateCamera(CameraUpdateFactory.zoomTo(11));
 
     }
 
@@ -235,7 +254,7 @@ public class LuggerMapActivity extends FragmentActivity implements OnMapReadyCal
         mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
 
         if(ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED ){
-            ActivityCompat.requestPermissions(LuggerMapActivity.this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION},LOCATION_REQUEST_CODE);
+            ActivityCompat.requestPermissions(PatronMapActivity.this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION},LOCATION_REQUEST_CODE);
         }
         LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient, mLocationRequest, this);
 
@@ -254,19 +273,6 @@ public class LuggerMapActivity extends FragmentActivity implements OnMapReadyCal
     @Override
     protected void onStop() {
         super.onStop();
-
-        LocationServices.FusedLocationApi.removeLocationUpdates(mGoogleApiClient, this);
-
-        String userId = FirebaseAuth.getInstance().getCurrentUser().getUid();
-        DatabaseReference ref = FirebaseDatabase.getInstance().getReference("luggersAvailable");
-
-        GeoFire geoFire = new GeoFire(ref);
-        geoFire.removeLocation(userId, new GeoFire.CompletionListener() {
-            @Override
-            public void onComplete(String key, DatabaseError error) {
-
-            }
-        });
 
     }
 }
