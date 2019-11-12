@@ -11,6 +11,8 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.os.Bundle;
+import android.provider.ContactsContract;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.Toast;
@@ -21,15 +23,22 @@ import com.firebase.geofire.GeoQuery;
 import com.firebase.geofire.GeoQueryEventListener;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.Status;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.libraries.places.api.Places;
+import com.google.android.libraries.places.api.model.Place;
+import com.google.android.libraries.places.api.net.PlacesClient;
+import com.google.android.libraries.places.widget.AutocompleteSupportFragment;
+import com.google.android.libraries.places.widget.listener.PlaceSelectionListener;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
@@ -37,8 +46,10 @@ import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 
 public class PatronMapActivity extends FragmentActivity implements OnMapReadyCallback, GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener, com.google.android.gms.location.LocationListener {
 
@@ -48,9 +59,14 @@ public class PatronMapActivity extends FragmentActivity implements OnMapReadyCal
     Location mLastLocation;
     LocationRequest mLocationRequest;
 
-    private Button mLogout, mRequest;
+    private Button mLogout, mRequest, mSettings;
     private LatLng pickupLocation;
 
+    private Boolean requestBol = false;
+
+    private Marker  pickupMarker;
+
+    private String destination;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -70,6 +86,9 @@ public class PatronMapActivity extends FragmentActivity implements OnMapReadyCal
 
         mLogout = (Button) findViewById(R.id.logout);
         mRequest = (Button) findViewById(R.id.request);
+        mSettings = (Button) findViewById(R.id.settings);
+
+
 
 
         mLogout.setOnClickListener(new View.OnClickListener() {
@@ -86,25 +105,108 @@ public class PatronMapActivity extends FragmentActivity implements OnMapReadyCal
         mRequest.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                String userId = FirebaseAuth.getInstance().getCurrentUser().getUid();
 
-                DatabaseReference ref = FirebaseDatabase.getInstance().getReference("patronRequest");
-                GeoFire geoFire = new GeoFire(ref);
-                geoFire.setLocation(userId, new GeoLocation(mLastLocation.getLatitude(), mLastLocation.getLongitude()), new GeoFire.CompletionListener() {
-                    @Override
-                    public void onComplete(String key, DatabaseError error) {
+                if(requestBol){
+                    requestBol = false;
+                    geoQuery.removeAllListeners();
+                    luggerLocationRef.removeEventListener(luggerLocationRefListener);
+
+                    if(luggerFoundID != null){
+                        DatabaseReference luggerRef = FirebaseDatabase.getInstance().getReference().child("Users").child("Luggers").child(luggerFoundID);
+                        luggerRef.setValue(true);
+                        luggerFoundID = null;
 
                     }
-                });
+                    luggerFound = false;
+                    radius = 1;
+                    String userId = FirebaseAuth.getInstance().getCurrentUser().getUid();
 
-                pickupLocation = new LatLng(mLastLocation.getLatitude(), mLastLocation.getLongitude());
-                mMap.addMarker(new MarkerOptions().position(pickupLocation).title("Pickup Here"));
-                mRequest.setText("Getting your Lugger...");
+                    DatabaseReference ref = FirebaseDatabase.getInstance().getReference("patronRequest");
+                    GeoFire geoFire = new GeoFire(ref);
+                    geoFire.removeLocation(userId, new GeoFire.CompletionListener() {
+                        @Override
+                        public void onComplete(String key, DatabaseError error) {
 
-                getClosestLugger();
+                        }
+                    });
+
+                    if(pickupMarker != null){
+                        pickupMarker.remove();
+                    }
+                    mRequest.setText("Call Lugger");
+
+
+
+
+                }
+                else{
+                    requestBol = true;
+                    String userId = FirebaseAuth.getInstance().getCurrentUser().getUid();
+
+                    DatabaseReference ref = FirebaseDatabase.getInstance().getReference("patronRequest");
+                    GeoFire geoFire = new GeoFire(ref);
+                    geoFire.setLocation(userId, new GeoLocation(mLastLocation.getLatitude(), mLastLocation.getLongitude()), new GeoFire.CompletionListener() {
+                        @Override
+                        public void onComplete(String key, DatabaseError error) {
+
+                        }
+                    });
+
+                    pickupLocation = new LatLng(mLastLocation.getLatitude(), mLastLocation.getLongitude());
+                    pickupMarker = mMap.addMarker(new MarkerOptions().position(pickupLocation).title("Pickup Here").icon(BitmapDescriptorFactory.fromResource(R.drawable.pickup_pin)));
+                    mRequest.setText("Getting your Lugger...");
+
+                    getClosestLugger();
+
+                }
+
 
             }
         });
+
+        mSettings.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                Intent intent = new Intent(PatronMapActivity.this, PatronSettingsActivity.class);
+                startActivity(intent);
+                return;
+
+            }
+        });
+
+
+        //Places API
+
+
+        Places.initialize(getApplicationContext(), "AIzaSyCqwz72TEG4-7A4M90vwQ6V545qY23HYQ8");
+
+        PlacesClient placesClient = Places.createClient(this);
+        if (!Places.isInitialized()) {
+            Places.initialize(getApplicationContext(), "AIzaSyCqwz72TEG4-7A4M90vwQ6V545qY23HYQ8");
+        }
+
+        // Initialize the AutocompleteSupportFragment.
+        AutocompleteSupportFragment autocompleteFragment = (AutocompleteSupportFragment)
+                getSupportFragmentManager().findFragmentById(R.id.autocomplete_fragment);
+
+// Specify the types of place data to return.
+        autocompleteFragment.setPlaceFields(Arrays.asList(Place.Field.ID, Place.Field.NAME));
+
+// Set up a PlaceSelectionListener to handle the response.
+        autocompleteFragment.setOnPlaceSelectedListener(new PlaceSelectionListener() {
+            @Override
+            public void onPlaceSelected(Place place) {
+                // TODO: Get info about the selected place.
+
+                destination = place.getName().toString();
+            }
+
+            @Override
+            public void onError(Status status) {
+                // TODO: Handle the error.
+            }
+        });
+
 
     }
 
@@ -112,23 +214,27 @@ public class PatronMapActivity extends FragmentActivity implements OnMapReadyCal
     private Boolean luggerFound = false;
     private String luggerFoundID;
 
+    GeoQuery geoQuery;
+
     private void getClosestLugger() {
         DatabaseReference luggerLocation = FirebaseDatabase.getInstance().getReference().child("luggersAvailable");
+
         GeoFire geoFire = new GeoFire(luggerLocation);
-        GeoQuery geoQuery = geoFire.queryAtLocation(new GeoLocation(pickupLocation.latitude, pickupLocation.longitude), radius);
+        geoQuery = geoFire.queryAtLocation(new GeoLocation(pickupLocation.latitude, pickupLocation.longitude), radius);
         geoQuery.removeAllListeners();
 
         geoQuery.addGeoQueryEventListener(new GeoQueryEventListener() {
             @Override
             public void onKeyEntered(String key, GeoLocation location) {
-                if(!luggerFound){
+                if(!luggerFound && requestBol){
                     luggerFound = true;
                     luggerFoundID = key;
 
-                    DatabaseReference luggerRef = FirebaseDatabase.getInstance().getReference().child("Users").child("Luggers").child(luggerFoundID);
+                    DatabaseReference luggerRef = FirebaseDatabase.getInstance().getReference().child("Users").child("Luggers").child(luggerFoundID).child("patronRequest");
                     String patronId = FirebaseAuth.getInstance().getCurrentUser().getUid();
                     HashMap map = new HashMap();
                     map.put("patronLugId", patronId);
+                    map.put("destination", destination);
                     luggerRef.updateChildren(map);
 
                     getLuggerLocation();
@@ -164,12 +270,14 @@ public class PatronMapActivity extends FragmentActivity implements OnMapReadyCal
         });
     }
     private Marker mLuggerMarker;
+    private DatabaseReference luggerLocationRef;
+    private ValueEventListener luggerLocationRefListener;
     private void getLuggerLocation() {
-        DatabaseReference luggerLocationRef = FirebaseDatabase.getInstance().getReference().child("luggersWorking").child(luggerFoundID).child("l");
-        luggerLocationRef.addValueEventListener(new ValueEventListener() {
+        luggerLocationRef = FirebaseDatabase.getInstance().getReference().child("luggersWorking").child(luggerFoundID).child("l");
+        luggerLocationRefListener = luggerLocationRef.addValueEventListener(new ValueEventListener() {
             @Override
             public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
-                if(dataSnapshot.exists()){
+                if(dataSnapshot.exists()&& requestBol){
                     List<Object> map = (List<Object>) dataSnapshot.getValue();
                     double locationLat = 0;
                     double locationLng = 0;
@@ -185,7 +293,24 @@ public class PatronMapActivity extends FragmentActivity implements OnMapReadyCal
                         mLuggerMarker.remove();
                     }
 
-                    mLuggerMarker = mMap.addMarker(new MarkerOptions().position(luggerLatLng).title("Your Lugger"));
+                    Location loc1 = new Location("");
+                    loc1.setLatitude(pickupLocation.latitude);
+                    loc1.setLongitude(pickupLocation.longitude);
+
+                    Location loc2 = new Location("");
+                    loc2.setLatitude(luggerLatLng.latitude);
+                    loc2.setLongitude(luggerLatLng.longitude);
+
+                    float distance = loc1.distanceTo(loc2);
+
+                    if(distance <100){
+                        mRequest.setText("Your Lugger is Here!");
+                    }
+                    else{
+                        mRequest.setText("Lugger Found: "+ distance);
+                    }
+
+                    mLuggerMarker = mMap.addMarker(new MarkerOptions().position(luggerLatLng).title("Your Lugger").icon(BitmapDescriptorFactory.fromResource(R.drawable.car)));
 
 
                 }

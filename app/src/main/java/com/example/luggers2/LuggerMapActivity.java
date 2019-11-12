@@ -13,8 +13,12 @@ import android.location.LocationListener;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
+import com.bumptech.glide.Glide;
 import com.firebase.geofire.GeoFire;
 import com.firebase.geofire.GeoLocation;
 import com.google.android.gms.common.ConnectionResult;
@@ -25,7 +29,9 @@ import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.database.DataSnapshot;
@@ -47,8 +53,17 @@ public class LuggerMapActivity extends FragmentActivity implements OnMapReadyCal
     Location mLastLocation;
     LocationRequest mLocationRequest;
 
-    private Button mLogout;
+    private Button mLogout, mSettings;
+
     private String patronId = "";
+
+    private Boolean isLoggingOut = false;
+
+    private LinearLayout mPatronInfo;
+
+    private ImageView mPatronProfileImage;
+
+    private TextView mPatronName, mPatronPhone, mPatronDestination;
 
 
     @Override
@@ -67,15 +82,40 @@ public class LuggerMapActivity extends FragmentActivity implements OnMapReadyCal
         }
 
 
+        mPatronInfo = (LinearLayout) findViewById(R.id.patronInfo);
+
+        mPatronProfileImage = (ImageView) findViewById(R.id.patronProfileImage);
+
+        mPatronName = (TextView) findViewById(R.id.patronName);
+
+        mPatronPhone = (TextView) findViewById(R.id.patronPhone);
+
+        mPatronDestination = (TextView) findViewById(R.id.patronDestination);
+
+
+
         mLogout = (Button) findViewById(R.id.logout);
+        mSettings = (Button) findViewById(R.id.settings);
+
+
         mLogout.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+                isLoggingOut = true;
+                disconnectLugger();
+
                 FirebaseAuth.getInstance().signOut();
                 Intent intent = new Intent(LuggerMapActivity.this, MainActivity.class);
                 startActivity(intent);
                 finish();
                 return;
+            }
+        });
+
+        mSettings.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                
             }
         });
 
@@ -85,13 +125,30 @@ public class LuggerMapActivity extends FragmentActivity implements OnMapReadyCal
 
     private void getAssignedPatron() {
         String luggerId = FirebaseAuth.getInstance().getCurrentUser().getUid();
-        DatabaseReference assignedPatronRef = FirebaseDatabase.getInstance().getReference().child("Users").child("Luggers").child(luggerId).child("patronLugId");
+        DatabaseReference assignedPatronRef = FirebaseDatabase.getInstance().getReference().child("Users").child("Luggers").child(luggerId).child("patronRequest").child("patronLugId");
         assignedPatronRef.addValueEventListener(new ValueEventListener() {
             @Override
             public void onDataChange(DataSnapshot dataSnapshot) {
                 if(dataSnapshot.exists()){
                     patronId = dataSnapshot.getValue().toString();
                     getAssignedPatronPickupLocation();
+                    getAssignedPatronDestination();
+                    getAssignedPatronInfo();
+
+                }else {
+                    patronId = "";
+                    if(pickupMarker != null){
+                        pickupMarker.remove();
+                    }
+                    if(assignedPatronPickupLocationRefListener != null) {
+                        assignedPatronPickupLocationRef.removeEventListener(assignedPatronPickupLocationRefListener);
+                    }
+                    mPatronInfo.setVisibility(View.GONE);
+                    mPatronName.setText("");
+                    mPatronPhone.setText("");
+                    mPatronDestination.setText("Destination: --");
+                    mPatronProfileImage.setImageResource(R.drawable.user);
+
                 }
             }
 
@@ -103,12 +160,70 @@ public class LuggerMapActivity extends FragmentActivity implements OnMapReadyCal
 
     }
 
-    private void getAssignedPatronPickupLocation() {
-        DatabaseReference assignedPatronPickupLocationRef = FirebaseDatabase.getInstance().getReference().child("patronRequest").child(patronId).child("l");
-        assignedPatronPickupLocationRef.addValueEventListener(new ValueEventListener() {
+
+    private void getAssignedPatronDestination() {
+        String luggerId = FirebaseAuth.getInstance().getCurrentUser().getUid();
+        DatabaseReference assignedPatronRef = FirebaseDatabase.getInstance().getReference().child("Users").child("Luggers").child(luggerId).child("patronRequest").child("destination");
+        assignedPatronRef.addListenerForSingleValueEvent(new ValueEventListener() {
+            @Override
+            public void onDataChange(DataSnapshot dataSnapshot) {
+                if(dataSnapshot.exists()){
+                    String destination = patronId = dataSnapshot.getValue().toString();
+                    mPatronDestination.setText("Destination: "+ destination);
+                }else {
+                    mPatronDestination.setText("Destination: --");
+                }
+            }
+
+            @Override
+            public void onCancelled(DatabaseError databaseError) {
+            }
+        });
+
+
+    }
+
+    private void getAssignedPatronInfo(){
+        mPatronInfo.setVisibility(View.VISIBLE);
+        DatabaseReference mPatronDatabase = FirebaseDatabase.getInstance().getReference().child("Users").child("Patrons").child(patronId);
+        mPatronDatabase.addListenerForSingleValueEvent(new ValueEventListener() {
             @Override
             public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
-                if(dataSnapshot.exists()){
+                if(dataSnapshot.exists() && dataSnapshot.getChildrenCount() > 0 ){
+                    Map<String, Object> map = (Map<String, Object>) dataSnapshot.getValue();
+                    if(map.get("name")!=null){
+                        map.get("name").toString();
+                        mPatronName.setText( map.get("name").toString());
+                    }
+                    if(map.get("phone")!=null){
+
+                        mPatronPhone.setText(map.get("phone").toString());
+                    }
+
+                    if(map.get("profileImageUrl")!=null){
+                        Glide.with(getApplication()).load(map.get("profileImageUrl").toString()).into(mPatronProfileImage);
+                    }
+
+                }
+            }
+
+            @Override
+            public void onCancelled(@NonNull DatabaseError databaseError) {
+
+            }
+        });
+    }
+
+
+    Marker pickupMarker;
+    private DatabaseReference assignedPatronPickupLocationRef;
+    private ValueEventListener assignedPatronPickupLocationRefListener;
+    private void getAssignedPatronPickupLocation() {
+        assignedPatronPickupLocationRef = FirebaseDatabase.getInstance().getReference().child("patronRequest").child(patronId).child("l");
+        assignedPatronPickupLocationRefListener = assignedPatronPickupLocationRef.addValueEventListener(new ValueEventListener() {
+            @Override
+            public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
+                if(dataSnapshot.exists() && !patronId.equals("")){
                     List<Object> map = (List<Object>) dataSnapshot.getValue();
                     double locationLat = 0;
                     double locationLng = 0;
@@ -120,7 +235,7 @@ public class LuggerMapActivity extends FragmentActivity implements OnMapReadyCal
                     }
                     LatLng luggerLatLng = new LatLng(locationLat, locationLng);
 
-                    mMap.addMarker(new MarkerOptions().position(luggerLatLng).title("pickup location"));
+                    pickupMarker = mMap.addMarker(new MarkerOptions().position(luggerLatLng).title("pickup location").icon(BitmapDescriptorFactory.fromResource(R.drawable.pickup_pin)));
                 }
             }
 
@@ -251,10 +366,7 @@ public class LuggerMapActivity extends FragmentActivity implements OnMapReadyCal
 
     }
 
-    @Override
-    protected void onStop() {
-        super.onStop();
-
+    private void disconnectLugger(){
         LocationServices.FusedLocationApi.removeLocationUpdates(mGoogleApiClient, this);
 
         String userId = FirebaseAuth.getInstance().getCurrentUser().getUid();
@@ -267,6 +379,16 @@ public class LuggerMapActivity extends FragmentActivity implements OnMapReadyCal
 
             }
         });
+    }
+
+    @Override
+    protected void onStop() {
+       super.onStop();
+        if(!isLoggingOut){
+            disconnectLugger();
+
+
+        }
 
     }
 }

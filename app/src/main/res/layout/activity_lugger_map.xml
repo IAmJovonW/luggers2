@@ -15,11 +15,64 @@
         android:textColor="#1976D2"
         android:text="logout"/>
 
+    <Button
+        android:layout_gravity="end"
+
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/settings"
+        android:background="@drawable/white_button_rounded"
+        android:fontFamily="@font/roboto"
+        android:textColor="#1976D2"
+        android:text="Settings"/>
+
 
     <fragment
         android:id="@+id/map"
         android:name="com.google.android.gms.maps.SupportMapFragment"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:id="@+id/patronInfo"
+        android:layout_gravity="bottom"
+        android:orientation="horizontal"
+        android:background="@color/white"
+        android:visibility="gone">
+
+        <ImageView
+            android:layout_width="100sp"
+            android:layout_height="100sp"
+            android:src="@drawable/user"
+            android:id="@+id/patronProfileImage"
+            android:padding="20sp"/>
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingLeft="40sp">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:id="@+id/patronDestination"
+                android:paddingBottom="10sp"
+                android:text="Destination: --"/>
+            <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/patronName"
+            android:paddingBottom="10sp"
+            android:paddingTop="20sp"/>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:id="@+id/patronPhone"
+                android:paddingBottom="10sp"
+                android:paddingTop="20sp"/>
+        </LinearLayout>
+
+    </LinearLayout>
 
 </FrameLayout>
